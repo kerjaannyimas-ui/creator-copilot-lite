@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creator Copilot Lite</title>
+    <!-- CSS Tailwind -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- React & Babel yang Lebih Stabil -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.21.4/babel.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Menggunakan React versi CDN global dengan aman
+        const { useState, useEffect } = React;
+
+        // --- Ikon SVG Sederhana ---
+        const BrainIcon = () => (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+        );
+
+        const KeyIcon = () => (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m-3 4h.02M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
+
+        // --- Fungsi Generator AI ---
+        const generateAIContent = async (prompt, systemInstruction = "", userApiKey = "") => {
+          if (!userApiKey) throw new Error("API_KEY_MISSING");
+          
+          const modelName = "gemini-1.5-flash"; 
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${userApiKey}`;
+          
+          const payload = {
+            contents: [{ parts: [{ text: prompt }] }]
+          };
+
+          if (systemInstruction) {
+            payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+          }
+
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.status === 400 || response.status === 403) {
+            throw new Error("API_KEY_INVALID");
+          }
+          if (!response.ok) {
+            throw new Error(`API_ERROR_${response.status}`);
+          }
+
+          const result = await response.json();
+          if (result.candidates && result.candidates.length > 0) {
+            return result.candidates[0].content.parts[0].text;
+          }
+          throw new Error("Gagal mendapatkan konten.");
+        };
+
+        // --- Aplikasi Utama ---
+        function CreatorCopilotApp() {
+          const [apiKey, setApiKey] = useState("");
+          const [isSaved, setIsSaved] = useState(false);
+          const [activeTab, setActiveTab] = useState("planner");
+          const [inputText, setInputText] = useState("");
+          const [aiOutput, setAiOutput] = useState("");
+          const [loading, setLoading] = useState(false);
+          const [errorMsg, setErrorMsg] = useState("");
+
+          useEffect(() => {
+            const savedKey = localStorage.getItem("user_gemini_api_key");
+            if (savedKey) {
+              setApiKey(savedKey);
+              setIsSaved(true);
+            }
+          }, []);
+
+          const handleSaveApiKey = (e) => {
+            e.preventDefault();
+            if (apiKey.trim()) {
+              localStorage.setItem("user_gemini_api_key", apiKey.trim());
+              setIsSaved(true);
+              setErrorMsg("");
+              alert("API Key berhasil disimpan!");
+            } else {
+              alert("Silakan masukkan API Key terlebih dahulu.");
+            }
+          };
+
+          const handleResetApiKey = () => {
+            localStorage.removeItem("user_gemini_api_key");
+            setApiKey("");
+            setIsSaved(false);
+            alert("API Key berhasil dihapus.");
+          };
+
+          const handleGenerate = async () => {
+            if (!apiKey) {
+              setErrorMsg("Harap masukkan dan SIMPAN API Key di atas terlebih dahulu!");
+              return;
+            }
+            setLoading(true);
+            setErrorMsg("");
+            setAiOutput("");
+
+            let systemPrompt = "Anda adalah asisten konten kreatif.";
+            let userPrompt = inputText;
+
+            if (activeTab === "planner") {
+              systemPrompt += " Tugas Anda membuat ide konten 30 hari terperinci.";
+              userPrompt = `Buatkan ide konten 30 hari tentang topik: ${inputText}`;
+            } else if (activeTab === "script") {
+              systemPrompt += " Tugas Anda menulis naskah video TikTok/Reels.";
+              userPrompt = `Buatkan naskah video 60 detik tentang: ${inputText}`;
+            }
+
+            try {
+              const result = await generateAIContent(userPrompt, systemPrompt, apiKey);
+              setAiOutput(result);
+            } catch (err) {
+              if (err.message === "API_KEY_INVALID") {
+                setErrorMsg("API Key salah atau tidak valid. Coba periksa kembali.");
+              } else {
+                setErrorMsg("Gagal menghubungi AI. Pastikan API Key aktif dan internet lancar.");
+              }
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          return (
+            <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+              <div className="max-w-4xl mx-auto space-y-6">
+                
+                {/* Header */}
+                <header className="flex items-center space-x-3 pb-6 border-b border-gray-200">
+                  <div className="p-2 bg-indigo-600 text-white rounded-xl">
+                    <BrainIcon />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Creator Copilot Lite</h1>
+                    <p className="text-sm text-gray-500">Asisten konten bertenaga AI Gemini</p>
+                  </div>
+                </header>
+
+                {/* API Key Box */}
+                <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                  <div className="flex items-center space-x-2 text-indigo-600 font-semibold mb-3">
+                    <KeyIcon />
+                    <h2>Pengaturan API Key Gemini Anda</h2>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Aplikasi ini berjalan gratis. Masukkan <strong>Gemini API Key</strong> dari Google AI Studio untuk mulai memproses teks. Kunci ini tersimpan aman secara lokal di perangkat Anda.
+                  </p>
+                  <form onSubmit={handleSaveApiKey} className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="password"
+                      placeholder={isSaved ? "••••••••••••••••••••••••••••••••" : "Masukkan API Key Anda di sini..."}
+                      value={apiKey}
+                      onChange={(e) => { setApiKey(e.target.value); if (isSaved) setIsSaved(false); }}
+                      disabled={isSaved}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {isSaved ? (
+                      <button type="button" onClick={handleResetApiKey} className="px-5 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-xl hover:bg-red-100 transition-colors">Ganti Key</button>
+                    ) : (
+                      <button type="submit" className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition-colors">Simpan Key</button>
+                    )}
+                  </form>
+                </section>
+
+                {/* Tabs */}
+                <div className="flex space-x-2 p-1 bg-gray-200 rounded-xl max-w-xs">
+                  <button
+                    onClick={() => { setActiveTab("planner"); setAiOutput(""); }}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === "planner" ? 'bg-white text-indigo-600 shadow' : 'text-gray-500'}`}
+                  >
+                    Ide 30 Hari
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab("script"); setAiOutput(""); }}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === "script" ? 'bg-white text-indigo-600 shadow' : 'text-gray-500'}`}
+                  >
+                    Naskah Video
+                  </button>
+                </div>
+
+                {/* Workspace */}
+                <main className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between">
+                    <div className="space-y-4">
+                      <label className="block text-sm font-semibold text-gray-700">
+                        {activeTab === "planner" ? "Topik Utama Konten Anda" : "Konsep / Rangkuman Video"}
+                      </label>
+                      <textarea
+                        rows={6}
+                        placeholder={activeTab === "planner" ? "Contoh: Tips diet keto untuk pemula..." : "Contoh: 3 kesalahan finansial anak muda..."}
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    {errorMsg && (
+                      <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-100">
+                        {errorMsg}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleGenerate}
+                      disabled={loading || !inputText}
+                      className="mt-6 w-full py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
+                    >
+                      {loading ? "Sedang meracik..." : "Mulai Buat ✨"}
+                    </button>
+                  </div>
+
+                  {/* Output */}
+                  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-[300px]">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-4 border-b pb-2">Hasil Rekomendasi AI</h3>
+                    {aiOutput ? (
+                      <div className="flex-1 whitespace-pre-line text-sm text-gray-600 overflow-y-auto max-h-[350px]">
+                        {aiOutput}
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                        <p className="text-xs">Hasil kreasi AI Anda akan tampil di sini.</p>
+                      </div>
+                    )}
+                  </div>
+                </main>
+
+              </div>
+            </div>
+          );
+        }
+
+        // Render aplikasi ke dalam ID root
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<CreatorCopilotApp />);
+    </script>
+</body>
+</html>
